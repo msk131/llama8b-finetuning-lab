@@ -1,134 +1,26 @@
 # Llama 8B Fine-Tuning Lab
 
-This project designs and builds a production-minded fine-tuning workflow for an 8B-class Llama model using open-source tooling. The goal is to adapt a base instruction model to a focused domain task while measuring quality, safety, cost, and deployment readiness.
+This repository documents an experimental fine-tuning workflow for an 8B-class Llama model. The focus is responsible experimentation: dataset readiness, baseline evaluation, LoRA/QLoRA planning, cost control, and serving checks.
 
-This is not a one-off notebook. It is a repeatable model customization pipeline with dataset preparation, supervised fine-tuning, LoRA/QLoRA adapters, evaluation, model packaging, and inference serving.
+## Design Focus
 
-## Why This Project Matters
-
-RAG is often the right first choice for knowledge-heavy systems, but fine-tuning is useful when a model must learn a consistent output format, domain language, classification behavior, extraction style, or task-specific reasoning pattern.
-
-This project demonstrates how to fine-tune responsibly:
-
-- Define the task clearly.
-- Build and version the dataset.
-- Train with parameter-efficient methods.
-- Compare base model vs tuned model.
-- Evaluate structured outputs and failure modes.
-- Package and serve the tuned adapter.
-
-## Critical Path
-
-The critical path is not "download model, run training, hope it is better." Fine-tuning an 8B model is only useful when each step proves something measurable.
-
-| Step | Decision | Why It Matters |
-| --- | --- | --- |
-| 1. Task definition | Decide the exact behavior to improve. | Fine-tuning without a narrow task wastes data, GPU time, and evaluation effort. |
-| 2. Dataset quality | Build reviewed train/validation/test examples. | Data quality usually matters more than the training script. |
-| 3. Baseline evaluation | Measure the base model before training. | Without a baseline, there is no proof the fine-tune helped. |
-| 4. Cost and capacity estimate | Estimate examples, tokens, sequence length, GPU memory, and GPU-hours. | Prevents expensive runs that fail because of VRAM, bad config, or unrealistic scope. |
-| 5. Small dry run | Train on a tiny sample first. | Catches format, tokenizer, loss, and checkpoint problems cheaply. |
-| 6. LoRA/QLoRA training | Train the adapter with tracked parameters. | Keeps the experiment cheaper and reproducible. |
-| 7. Frozen test evaluation | Compare tuned model against base model. | Prevents overfitting and fake progress. |
-| 8. Serving check | Run the same prompt format in inference. | Training success does not matter if serving behavior is different. |
-
-## Cost And Time Planning
-
-Training cost is planned in GPU-hours, not vibes. Actual dollar cost depends on the GPU provider, region, reserved/on-demand pricing, and whether the run uses a local workstation or cloud GPU.
-
-Cost formula:
-
-```text
-estimated_cost = gpu_hour_price * (training_hours + evaluation_hours + failed_run_buffer)
-```
-
-Planning ranges for this project:
-
-| Run Type | Dataset Size | Typical Hardware | Time Expectation | Purpose |
-| --- | --- | --- | --- | --- |
-| Smoke test | 50-200 examples | 16-24 GB GPU if available | Minutes to under 1 hour | Validate dataset format, tokenizer, prompt template, and training loop. |
-| Small LoRA/QLoRA run | 1k-5k examples | 24 GB GPU or better | 1-6 hours | Prove the task can improve before spending more. |
-| Serious adapter run | 10k-50k examples | 40-80 GB GPU or multi-GPU setup | 6-24+ hours | Produce a meaningful domain adapter with repeatable metrics. |
-| Full fine-tune | Large curated dataset | Multi-GPU training cluster | Days or more | Out of scope at the start because cost and risk are much higher. |
-
-Every experiment should record:
-
-- Base model and revision.
-- Dataset version and token count.
-- Sequence length.
-- Batch size, gradient accumulation, epochs, learning rate, LoRA rank, and quantization mode.
-- GPU type, VRAM, runtime, and estimated cost.
-- Evaluation metrics before and after tuning.
-- Failure reason if the run is stopped.
-
-## Why Experience Matters
-
-A vibe is beautiful for exploration. It is not enough for fine-tuning.
-
-Fine-tuning can look successful while actually making the model worse. Common traps include training on leaked test examples, overfitting to a tiny dataset, improving one demo while breaking general behavior, producing invalid JSON under slight prompt changes, or spending GPU money on a bad data format.
-
-Experience matters because the hard parts are judgment-heavy:
-
-- Knowing whether the problem needs RAG, prompting, or fine-tuning.
-- Seeing dataset leakage before metrics become fake.
-- Choosing sequence length, batch size, LoRA rank, learning rate, and evaluation size.
-- Reading loss curves and knowing when a run is broken.
-- Designing tests that catch hallucination, invalid format, and domain mistakes.
-- Stopping a bad experiment early before it burns time and money.
-
-## What We Are Building
-
-The first version will fine-tune an 8B-class Llama instruction model for a focused domain task such as structured JSON extraction from finance/operations text, incident summarization, or policy-aware classification.
-
-Primary capabilities:
-
-| Capability | Purpose |
+| Area | Design Point |
 | --- | --- |
-| Dataset builder | Convert raw examples into train/validation/test splits. |
-| Prompt template | Standardize instruction, input, and expected output format. |
-| SFT training | Supervised fine-tuning with LoRA/QLoRA. |
-| Experiment tracking | Record parameters, dataset version, metrics, and artifacts. |
-| Evaluation harness | Compare base and tuned models. |
-| Model card | Document task, data, limitations, and intended use. |
-| Inference server | Serve the tuned adapter through vLLM, TGI, or Ollama where practical. |
+| Task scope | Fine-tune only for a narrow behavior such as structured extraction or classification style. |
+| Dataset readiness | Clean, validate, split, and version examples before training. |
+| Baseline | Measure the base model before any adapter run. |
+| Cost control | Estimate tokens, VRAM, GPU-hours, and failed-run buffer before scaling. |
+| Training | Prefer LoRA/QLoRA experiments before considering full fine-tuning. |
+| Evaluation | Compare tuned adapter against the frozen test set and failure cases. |
+| Serving | Verify the same prompt format works in inference. |
 
-## How We Will Build It
+## Diagrams
 
-Open-source-first stack:
-
-| Layer | Technology |
+| Diagram | Purpose |
 | --- | --- |
-| Base model | Llama 8B-class instruct model |
-| Training | Hugging Face Transformers, TRL SFTTrainer |
-| Parameter-efficient tuning | PEFT LoRA/QLoRA |
-| Quantization | bitsandbytes 4-bit where supported |
-| Fast training option | Unsloth where environment supports it |
-| Dataset handling | Hugging Face Datasets |
-| Evaluation | lm-evaluation-harness style tasks, custom JSON/format checks, human review set |
-| Tracking | MLflow or Weights & Biases |
-| Serving | vLLM, Text Generation Inference, or Ollama |
-| Delivery | Docker Compose locally, GPU-ready container, Kubernetes job pattern later |
-
-## Design Principles
-
-- **Fine-tune for behavior, not facts**: use RAG for changing knowledge; use fine-tuning for task behavior and output discipline.
-- **Keep a frozen test set**: never tune against the final evaluation set.
-- **Track dataset lineage**: every run must know the data version and prompt template.
-- **Compare against baseline**: tuned model must beat the base model on defined metrics.
-- **Prefer LoRA/QLoRA first**: full fine-tuning is expensive and unnecessary for this project start.
-- **Evaluate failure modes**: invalid JSON, hallucination, refusal quality, unsafe output, and domain mistakes.
-
-## Project Structure
-
-```text
-llama8b-finetuning-lab/
-├── README.md
-├── plan.md
-├── diagrams/
-│   └── finetuning-pipeline.md
-└── docs/
-```
+| [diagrams/01-high-level-design.md](diagrams/01-high-level-design.md) | End-to-end fine-tuning workflow. |
+| [diagrams/02-low-level-design.md](diagrams/02-low-level-design.md) | Training run control flow. |
 
 ## Current Status
 
-This project starts with planning and architecture. The next step is to select the first task, define the dataset schema, and implement the dataset preparation and baseline evaluation scripts.
+Experimental design repository. It does not claim a completed fine-tuned model.
